@@ -10,3 +10,8 @@ data/
 llm/
 competition_fb/
 *.zip
+
+
+# local-only reference material
+context/
+*.pdf

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    data_dir: Path = Path("../data")
+    data_dir: Path = Path("data")
     hf_token: str = ""
     hf_dataset: str = "AIGuruTinix/ViBioMIR"
 

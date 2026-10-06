@@ -1,6 +1,6 @@
 # R2AI2026 – Truy hồi tài liệu y khoa đa ngôn ngữ
 
-Bối cảnh đề: [../context/01-overview.png](../context/01-overview.png), metric: [02-evaluation.png](../context/02-evaluation.png), dữ liệu: [03-data.png](../context/03-data.png), định dạng nộp: [04-submission.png](../context/04-submission.png).
+Cuộc thi R2AI2026 (AI Guru) – truy hồi tài liệu y khoa đa ngôn ngữ trên bộ dữ liệu ViBioMIR: truy vấn tiếng Việt, tài liệu tiếng Việt/Anh/Trung. Chấm bằng P/R/F2 ở cấp tài liệu và cấp chunk; nộp file `.json` gồm `relevant_docs` + `relevant_chunks`.
 
 ## Khác biệt cốt lõi so với dự án luật (folder 4)
 | | Luật (4) | Cuộc thi này |
@@ -50,12 +50,12 @@ uv run python -m medrag.cli fetch          # query.parquet, links_corpus.parquet
 uv run python -m medrag.cli crawl          # resume được; --limit N để thử; --retry-failed
 uv run python -m medrag.cli stats
 uv run python -m medrag.cli cluster && uv run python -m medrag.cli chunk && uv run python -m medrag.cli index   # hoặc scripts/run_pipeline.sh
-uv run python -m medrag.cli submit --limit 20 --out ../data/submissions/dev.json
+uv run python -m medrag.cli submit --limit 20 --out data/submissions/dev.json
 uv run python -m medrag.cli eval pred.json gold.json     # khi có nhãn
 uv run pytest
 uv run uvicorn medrag.app.api:app --port 8000   # dev UI
-uv run python -m medrag.cli dev-sample          # 80 query dev -> ../data/dev/dev_queries.json
-uv run python -m medrag.cli label               # web gán nhãn :8010 -> ../data/dev/dev_gold.json (định dạng nộp, dùng cho `eval`)
+uv run python -m medrag.cli dev-sample          # 80 query dev -> data/dev/dev_queries.json
+uv run python -m medrag.cli label               # web gán nhãn :8010 -> data/dev/dev_gold.json (định dạng nộp, dùng cho `eval`)
 ```
 
 ## Trạng thái

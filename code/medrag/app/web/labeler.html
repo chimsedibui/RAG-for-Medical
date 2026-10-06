@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gán nhãn dev set</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1c2430; --mut:#667085; --line:#e1e4ea; --acc:#2563eb; --ok:#15803d; --skip:#b45309; --sel:#eef4ff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f27; --ink:#e6e9ef; --mut:#98a2b3; --line:#2c323d; --acc:#6ea0ff; --ok:#4ade80; --skip:#fbbf24; --sel:#1d2a44; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; display:flex; height:100vh; }
+  aside { width:300px; border-right:1px solid var(--line); background:var(--card); overflow-y:auto; flex:none; }
+  aside h2 { margin:0; padding:12px 14px; font-size:14px; position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); }
+  .qi { padding:8px 14px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; gap:8px; font-size:13px; }
+  .qi:hover { background:var(--bg); } .qi.cur { background:var(--sel); }
+  .qi .t { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .dot { flex:none; width:18px; text-align:center; color:var(--mut); } .done .dot { color:var(--ok); } .skip .dot { color:var(--skip); }
+  main { flex:1; overflow-y:auto; padding:18px 24px 80px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .qtext { font-size:17px; font-weight:600; white-space:pre-wrap; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  input[type=text] { flex:1; min-width:200px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); font:inherit; }
+  button { padding:6px 12px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--ink); font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); } button.pri { background:var(--acc); color:#fff; border-color:var(--acc); }
+  button.on { background:var(--sel); border-color:var(--acc); color:var(--acc); }
+  .badge { font-size:11px; padding:1px 7px; border-radius:10px; background:var(--bg); border:1px solid var(--line); color:var(--mut); }
+  .doc.rel { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
+  .doc h3 { margin:0; font-size:14.5px; } .doc a { color:var(--acc); font-size:12px; word-break:break-all; }
+  .chunk { margin-top:8px; padding:8px 10px; background:var(--bg); border-radius:6px; font-size:13.5px; white-space:pre-wrap; }
+  .chunk.picked { background:var(--sel); outline:1px solid var(--acc); }
+  .ctx { font-size:11.5px; color:var(--mut); margin-bottom:3px; }
+  .full { margin-top:8px; max-height:380px; overflow:auto; padding:10px; border:1px dashed var(--line); border-radius:6px; white-space:pre-wrap; font-size:13.5px; }
+  .picked-list .chunk { display:flex; gap:8px; justify-content:space-between; }
+  .muted { color:var(--mut); font-size:13px; } .sticky { position:sticky; top:-18px; z-index:2; }
+  #msg { position:fixed; right:18px; bottom:14px; font-size:12px; color:var(--mut); background:var(--card); border:1px solid var(--line); padding:4px 10px; border-radius:6px; }
+</style>
+</head>
+<body>
+<aside><h2>Dev queries <span id="prog" class="muted"></span></h2><div id="qlist"></div></aside>
+<main>
+  <div class="card sticky">
+    <div class="qtext" id="qtext">Đang tải…</div>
+    <div class="row">
+      <input type="text" id="q2" placeholder="Tìm lại với câu khác (có thể gõ tiếng Anh / Trung để dò thêm)…">
+      <button onclick="doSearch(document.getElementById('q2').value)">Tìm</button>
+    </div>
+    <div class="row">
+      <button class="pri" onclick="finish('done')">✓ Xong, sang câu sau</button>
+      <button onclick="finish('skip')">⏭ Không có doc đúng (bỏ qua)</button>
+      <button onclick="go(-1)">←</button><button onclick="go(1)">→</button>
+      <span class="muted" id="sum"></span>
+    </div>
+  </div>
+  <div id="picked" class="card picked-list" style="display:none"></div>
+  <div id="results"></div>
+</main>
+<div id="msg"></div>
+<script>
+let queries = [], cur = -1, label = {docs: [], chunks: []}, results = [];
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = (u, body) => fetch(u, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {}).then(r => r.json());
+const note = t => { $('msg').textContent = t; };
+
+async function init() {
+  queries = await api('/api/queries');
+  renderList();
+  const first = queries.findIndex(q => q.status === 'todo');
+  select(first < 0 ? 0 : first);
+}
+function renderList() {
+  $('qlist').innerHTML = queries.map((q, i) =>
+    `<div class="qi ${q.status} ${i === cur ? 'cur' : ''}" onclick="select(${i})"><span class="dot">${q.status === 'done' ? '✓' : q.status === 'skip' ? '⏭' : '○'}</span><span class="t">${esc(q.query)}</span></div>`).join('');
+  const n = s => queries.filter(q => q.status === s).length;
+  $('prog').textContent = `${n('done')} xong · ${n('skip')} bỏ · ${n('todo')} còn`;
+}
+async function select(i) {
+  if (i < 0 || i >= queries.length) return;
+  cur = i; const q = queries[i];
+  $('qtext').textContent = `#${q.id}  ${q.query}`; $('q2').value = q.query;
+  const l = await api('/api/label/' + q.id);
+  label = {docs: l.docs.slice(), chunks: l.chunks.slice()};
+  renderList(); renderPicked(); await doSearch(q.query);
+}
+const go = d => select(cur + d);
+async function doSearch(text) {
+  $('results').innerHTML = '<div class="muted">Đang tìm (BM25 + dense + hybrid)…</div>';
+  results = await api('/api/search', {query: text});
+  renderResults();
+}
+const isDoc = id => label.docs.includes(id);
+const chunkIdx = (id, t) => label.chunks.findIndex(c => c.doc_id === id && c.chunk_text === t);
+
+function renderResults() {
+  $('results').innerHTML = results.map((d, i) => `
+    <div class="card doc ${isDoc(d.doc_id) ? 'rel' : ''}" id="doc${i}">
+      <div class="row" style="margin:0">
+        <button class="${isDoc(d.doc_id) ? 'on' : ''}" onclick="toggleDoc(${i})">${isDoc(d.doc_id) ? '✓ Doc đúng' : '☐ Đánh dấu doc đúng'}</button>
+        <h3>${esc(d.title || '(không tiêu đề)')}</h3>
+        <span class="badge">${d.lang}</span><span class="badge">${esc(d.host)}</span>
+        ${d.sources.map(s => `<span class="badge">${s}</span>`).join('')}
+        <span class="badge">id ${d.doc_id}</span>
+      </div>
+      <a href="${esc(d.url)}" target="_blank" rel="noreferrer">${esc(d.url)}</a>
+      ${d.chunks.map((c, j) => `<div class="chunk ${chunkIdx(d.doc_id, c.text) >= 0 ? 'picked' : ''}">
+        <div class="ctx">${esc(c.context)}</div>${esc(c.text)}
+        <div class="row"><button onclick="toggleChunk(${i},${j})">${chunkIdx(d.doc_id, c.text) >= 0 ? '− Bỏ chunk này' : '＋ Dùng chunk này'}</button></div></div>`).join('')}
+      <div class="row"><button onclick="showFull(${i})">📄 Xem toàn văn / bôi đen đoạn khác</button></div>
+      <div id="full${i}"></div>
+    </div>`).join('') || '<div class="muted">Không có kết quả.</div>';
+}
+function renderPicked() {
+  const el = $('picked');
+  el.style.display = label.chunks.length || label.docs.length ? '' : 'none';
+  const docsOnly = label.docs.filter(d => !label.chunks.some(c => c.doc_id === d));
+  el.innerHTML = `<b>Đã chọn:</b> ${label.docs.length} doc, ${label.chunks.length} chunk` +
+    (docsOnly.length ? `<div class="muted">Doc chưa có chunk: ${docsOnly.join(', ')}</div>` : '') +
+    label.chunks.map((c, k) => `<div class="chunk"><span><span class="badge">doc ${c.doc_id}</span> ${esc(c.chunk_text.slice(0, 220))}${c.chunk_text.length > 220 ? '…' : ''}</span><button onclick="removeChunk(${k})">×</button></div>`).join('');
+  $('sum').textContent = `${label.docs.length} doc · ${label.chunks.length} chunk`;
+}
+function toggleDoc(i) {
+  const id = results[i].doc_id;
+  if (isDoc(id)) { label.docs = label.docs.filter(d => d !== id); label.chunks = label.chunks.filter(c => c.doc_id !== id); }
+  else label.docs.push(id);
+  changed();
+}
+function toggleChunk(i, j) {
+  const d = results[i], c = d.chunks[j], k = chunkIdx(d.doc_id, c.text);
+  if (k >= 0) label.chunks.splice(k, 1);
+  else { label.chunks.push({doc_id: d.doc_id, chunk_text: c.text}); if (!isDoc(d.doc_id)) label.docs.push(d.doc_id); }
+  changed();
+}
+function removeChunk(k) { label.chunks.splice(k, 1); changed(); }
+async function showFull(i) {
+  const d = results[i], box = $('full' + i);
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  const doc = await api('/api/doc/' + d.doc_id);
+  box.innerHTML = `<div class="muted" style="margin-top:8px">Bôi đen đoạn trả lời rồi bấm nút bên dưới.</div>
+    <div class="full" id="txt${i}">${esc(doc.text)}</div>
+    <div class="row"><button class="pri" onmousedown="event.preventDefault()" onclick="addSelection(${i})">＋ Thêm đoạn đang bôi đen</button></div>`;
+}
+function addSelection(i) {
+  const sel = window.getSelection(), t = sel.toString().trim(), box = $('txt' + i);
+  if (!t || !box.contains(sel.anchorNode)) { note('Chưa bôi đen đoạn nào trong khung toàn văn'); return; }
+  const d = results[i];
+  if (chunkIdx(d.doc_id, t) < 0) label.chunks.push({doc_id: d.doc_id, chunk_text: t});
+  if (!isDoc(d.doc_id)) label.docs.push(d.doc_id);
+  sel.removeAllRanges(); changed();
+}
+function changed() { renderResults(); renderPicked(); save(queries[cur].status === 'done' ? 'done' : 'todo'); }
+async function save(status) {
+  const q = queries[cur];
+  const r = await api('/api/label/' + q.id, {docs: label.docs, chunks: label.chunks, status});
+  q.status = r.status;
+  note('Đã lưu ' + new Date().toLocaleTimeString()); renderList();
+}
+async function finish(status) {
+  if (status === 'done' && !label.docs.length) { note('Chưa chọn doc nào — dùng "Không có doc đúng" nếu query này không có đáp án'); return; }
+  await save(status);
+  const next = queries.findIndex((q, i) => i > cur && q.status === 'todo');
+  select(next >= 0 ? next : Math.min(cur + 1, queries.length - 1));
+}
+init();
+</script>
+</body>
+</html>

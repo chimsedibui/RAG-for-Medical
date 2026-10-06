@@ -1,0 +1,12 @@
+# secrets / env
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.log
+
+# large data, models, feedback artifacts
+data/
+llm/
+competition_fb/
+*.zip

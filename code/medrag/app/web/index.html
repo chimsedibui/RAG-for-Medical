@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medical Retrieval Dev UI</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b2430; --mute:#667085; --line:#e4e7ec; --acc:#0f766e; --acc-bg:#e6f4f2;
+          --vi:#1d4ed8; --en:#7c3aed; --zh:#b45309; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0e1116; --card:#161b22; --ink:#e6edf3; --mute:#8b949e;
+          --line:#2a313c; --acc:#2dd4bf; --acc-bg:#12312e; --vi:#7aa2ff; --en:#c4a7ff; --zh:#f0b36b; } }
+  * { box-sizing:border-box }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink) }
+  main { max-width:920px; margin:0 auto; padding:24px 16px 64px }
+  h1 { font-size:20px; margin:0 0 2px } .sub { color:var(--mute); margin-bottom:18px; font-size:13px }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px }
+  textarea { width:100%; min-height:72px; resize:vertical; border:1px solid var(--line); border-radius:8px; padding:10px;
+             font:inherit; background:transparent; color:inherit }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:10px }
+  select, button { font:inherit; border-radius:8px; border:1px solid var(--line); padding:7px 12px; background:var(--card); color:inherit }
+  button.go { background:var(--acc); color:#fff; border-color:var(--acc); font-weight:600; cursor:pointer; margin-left:auto }
+  button.go:disabled { opacity:.5; cursor:wait }
+  label { color:var(--mute); font-size:13px; display:flex; gap:6px; align-items:center }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px }
+  .chip { font-size:12.5px; padding:4px 10px; border-radius:999px; background:var(--acc-bg); color:var(--acc); cursor:pointer; border:0 }
+  .meta { color:var(--mute); font-size:13px; margin:18px 2px 8px }
+  .doc { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px }
+  .doc h3 { margin:0; font-size:15px } .doc a { color:inherit; text-decoration:none; border-bottom:1px dotted var(--mute) }
+  .tags { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--mute); margin:3px 0 8px; flex-wrap:wrap }
+  .lang { font-weight:700; text-transform:uppercase; padding:1px 7px; border-radius:6px; border:1px solid currentColor }
+  .lang.vi{color:var(--vi)} .lang.en{color:var(--en)} .lang.zh{color:var(--zh)}
+  .chunk { border-left:3px solid var(--acc); background:var(--acc-bg); padding:8px 10px; border-radius:0 8px 8px 0; margin-top:6px;
+           white-space:pre-wrap; word-break:break-word; font-size:14px }
+  .chunk small { display:block; color:var(--mute); margin-bottom:3px }
+  details { margin-top:14px } summary { cursor:pointer; color:var(--mute); font-size:13px }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; max-height:320px; font-size:12px }
+  .err { color:#b42318; padding:10px }
+  .sup { color:var(--acc); font-weight:600 }
+  .div { font-size:13px; color:var(--mute); margin:0 2px 10px }
+  .warn { color:#b45309; font-weight:600 }
+</style>
+</head>
+<body>
+<main>
+  <h1>Medical Retrieval – Dev UI</h1>
+  <div class="sub" id="health">đang tải trạng thái…</div>
+
+  <div class="box">
+    <textarea id="q" placeholder="Nhập câu hỏi y khoa tiếng Việt…"></textarea>
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <label>Chế độ
+        <select id="mode"><option value="hybrid">hybrid (BM25 + dense)</option><option value="dense">dense</option><option value="bm25">BM25</option></select>
+      </label>
+      <label><input type="checkbox" id="rerank"> rerank (bge-reranker)</label>
+      <label>Chunk nộp
+        <select id="unit"><option value="child">child (nhỏ)</option><option value="parent">parent (lớn)</option></select>
+      </label>
+      <button class="go" id="go">Tìm kiếm</button>
+    </div>
+    <div class="row">
+      <label title="Truy hồi riêng từng ngôn ngữ rồi gộp theo hạng, tránh corpus tiếng Trung lấn át"><input type="checkbox" id="strat" checked> chia tầng theo ngôn ngữ</label>
+      <label title="Cộng điểm khi các nguồn độc lập (host khác, không phải bản đăng lại) cùng nói một ý"><input type="checkbox" id="cons" checked> đồng thuận chéo nguồn</label>
+      <label>tối đa doc / host <select id="cap"><option>1</option><option selected>2</option><option>3</option><option value="99">không giới hạn</option></select></label>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</main>
+<script>
+const EX = ["Cần làm gì đối với tình trạng tắc nghẽn đường tiết niệu do sỏi thận?",
+  "Kết quả của Beta-HCG là dưới 0.10 U/L thì là như thế nào ạ?",
+  "Răng có lỗ chấm đen, chảy máu khi thức dậy là sao?",
+  "Cách phòng tránh nguy cơ lây nhiễm bệnh lao đa kháng là gì?",
+  "Đau đầu sau chấn thương thì xử trí thế nào?",
+  "Trẻ sơ sinh bị vàng da kéo dài có nguy hiểm không?"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+EX.forEach(t => { const b = document.createElement("button"); b.className = "chip"; b.textContent = t;
+  b.onclick = () => { $("q").value = t; run(); }; $("chips").appendChild(b); });
+
+fetch("/api/health").then(r => r.json()).then(h => {
+  $("health").textContent = `${h.docs.toLocaleString()} tài liệu · ${h.chunks.toLocaleString()} chunk · ${h.qdrant_points.toLocaleString()} vector trong Qdrant · mở rộng truy vấn: ${h.query_expansion ? "bật" : "tắt"}`;
+}).catch(() => $("health").textContent = "không kết nối được backend");
+
+async function run() {
+  const query = $("q").value.trim(); if (!query) return;
+  $("go").disabled = true; $("out").innerHTML = '<div class="meta">đang tìm…</div>';
+  try {
+    const res = await fetch("/api/search", { method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ query, mode: $("mode").value, rerank: $("rerank").checked, output_unit: $("unit").value,
+        stratify: $("strat").checked, consensus: $("cons").checked, host_cap: +$("cap").value }) });
+    if (!res.ok) throw new Error(await res.text());
+    render(await res.json());
+  } catch (e) { $("out").innerHTML = `<div class="err">Lỗi: ${esc(e.message)}</div>`; }
+  $("go").disabled = false;
+}
+
+function render(d) {
+  const nch = d.relevant_chunks.length;
+  const v = d.diversity, langs = Object.entries(v.langs).map(([k, n]) => `${k}:${n}`).join(" ");
+  let h = `<div class="meta">${d.relevant_docs.length} tài liệu · ${nch} chunk được chọn (từ ${d.n_candidates} ứng viên) · ${d.latency_ms} ms</div>
+    <div class="div">${v.n_hosts} nguồn · ngôn ngữ ${langs} · ${v.corroborated}/${d.docs.length} doc được nguồn khác đồng thuận
+      ${v.single_source ? '<span class="warn"> · chỉ một nguồn, chưa kiểm chứng chéo</span>' : ""}</div>`;
+  for (const doc of d.docs) {
+    h += `<div class="doc"><h3><a href="${esc(doc.url)}" target="_blank" rel="noopener">${esc(doc.title || doc.url || "doc " + doc.doc_id)}</a></h3>
+      <div class="tags"><span class="lang ${esc(doc.lang)}">${esc(doc.lang)}</span><span>id ${doc.doc_id}</span><span>điểm ${doc.score}</span>${doc.support ? `<span class="sup" title="${esc(doc.support_hosts.join(", "))}">✓ ${doc.support} nguồn đồng thuận</span>` : '<span>chưa có nguồn đồng thuận</span>'}<span>${esc((doc.url||"").replace(/^https?:\/\//,"").split("/")[0])}</span></div>`;
+    for (const c of doc.chunks) h += `<div class="chunk"><small>${esc(c.context)} · điểm ${c.score}</small>${esc(c.text)}</div>`;
+    h += `</div>`;
+  }
+  const sub = JSON.stringify({ id: 0, relevant_docs: d.relevant_docs, relevant_chunks: d.relevant_chunks }, null, 1);
+  h += `<details><summary>Bản ghi theo định dạng file nộp</summary><pre>${esc(sub)}</pre></details>`;
+  $("out").innerHTML = h;
+}
+$("go").onclick = run;
+$("q").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+</script>
+</body>
+</html>

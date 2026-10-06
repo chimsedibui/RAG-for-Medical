@@ -1,0 +1,36 @@
+[project]
+name = "r2ai2026-medical-retrieval"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "huggingface_hub>=0.25",
+    "requests>=2.32",
+    "trafilatura>=2.0",
+    "pypdf>=5.0",
+    "bm25s>=0.2.5",
+    "qdrant-client>=1.12",
+    "tqdm>=4.66",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
+
+[project.optional-dependencies]
+# Heavy model deps, only needed for indexing / retrieval, not for crawl / metrics / tests.
+ml = [
+    "torch>=2.4",
+    "sentence-transformers>=3.3",
+    "transformers>=4.46",
+]
+llm = ["openai>=1.50"]   # OpenAI-compatible client for a local vLLM server (query translation)
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
